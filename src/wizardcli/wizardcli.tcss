@@ -1,0 +1,110 @@
+Screen {
+    layout: vertical;
+    background: #0b0f19;
+    color: #e5e7eb;
+}
+
+AppHeader {
+    dock: top;
+    height: auto;
+    padding: 1 3;
+    color: #dbeafe;
+    background: #11182700;
+    border-bottom: solid #334155;
+}
+
+AppHeader #app-title {
+    color: #ff849f;
+    width: auto;
+}
+
+AppHeader #app-user-host {
+    dock: right;
+    color: #3f86e9;
+}
+
+Footer {
+    dock: bottom;
+    height: 3;
+    background: #11182700;
+    color: #94a3b8;
+    border-top: solid #334155;
+}
+
+FooterKey {
+    background: #11182700;
+}
+
+FooterKey .footer-key--key {
+    background: #ff358d00;
+    color: #ff358d;
+    text-style: bold;
+}
+
+FooterKey .footer-key--description {
+    color: #cbd5e1;
+}
+
+FooterLabel {
+    color: #94a3b8;
+}
+
+#panes {
+    height: 1fr;
+    padding: 1 2;
+    background: #0b0f19;
+}
+
+MediaBrowser {
+    width: 1fr;
+    margin: 0 1;
+    border: solid #1f2937;
+    background: #11182700;
+    color: #bbb6e2;
+    padding: 0 1;
+    scrollbar-size-vertical: 1;
+    scrollbar-size-horizontal: 0;
+    scrollbar-color: #64748b 45%;
+    scrollbar-color-hover: #6c7d95 50%;
+    scrollbar-color-active: #6c7d95;
+    scrollbar-background: #0b0f1900;
+    scrollbar-background-hover: #0b0f1900;
+    scrollbar-background-active: #0b0f1900;
+}
+
+MediaBrowser:focus,
+MediaBrowser:hover {
+    border: solid #ff358d;
+}
+
+MediaBrowser .tree--cursor {
+    background: #141abcbb;
+    color: #0b0f1900;
+}
+
+MediaBrowser .tree--cursor-line {
+    background: #1e293b00;
+}
+
+MediaBrowser .tree--branch,
+MediaBrowser .tree--guide {
+    color: #47556900;
+}
+
+#status {
+    height: 3;
+    padding: 0 2;
+    content-align: left middle;
+    background: #0f172a00;
+    color: #cbd5e1;
+    border-top: solid #1f2937;
+}
+
+#sort-indicator {
+    height: 1;
+    padding: 0 2;
+    /* align to the right under the media panes */
+    content-align: right middle;
+    color: #94a3b8;
+    margin: 0 1;
+}
