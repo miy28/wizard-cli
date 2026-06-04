@@ -1,103 +1,143 @@
+/* Opaque theme values preserved here so the UI keeps its original dark surfaces. */
+$wizard-fg: #e5e7eb;
+$wizard-header-fg: #dbeafe;
+$wizard-title-fg: #ff849f;
+$wizard-user-fg: #3f86e9;
+$wizard-footer-fg: #94a3b8;
+$wizard-border: #334155;
+$wizard-browser-border: #1f2937;
+$wizard-browser-fg: #bbb6e2;
+$wizard-cursor-bg: #141abcbb;
+$wizard-cursor-fg: #0b0f19;
+$wizard-cursor-line-bg: #1e293b;
+$wizard-guide-fg: #475569;
+$wizard-accent: #ff358d;
+$wizard-status-fg: #cbd5e1;
+$wizard-sort-fg: #94a3b8;
+$wizard-panel-bg: #0b0f19;
+$wizard-header-bg: #111827;
+
 Screen {
     layout: vertical;
-    background: #0b0f19;
-    color: #e5e7eb;
+    background: $wizard-panel-bg;
+    color: $wizard-fg;
 }
 
 AppHeader {
     dock: top;
     height: auto;
     padding: 1 3;
-    color: #dbeafe;
-    background: #11182700;
-    border-bottom: solid #334155;
+    color: $wizard-header-fg;
+    background: $wizard-header-bg;
+    border-bottom: solid $wizard-border;
 }
 
 AppHeader #app-title {
-    color: #ff849f;
+    color: $wizard-title-fg;
     width: auto;
 }
 
 AppHeader #app-user-host {
     dock: right;
-    color: #3f86e9;
+    color: $wizard-user-fg;
 }
 
 Footer {
     dock: bottom;
     height: 3;
-    background: #11182700;
-    color: #94a3b8;
-    border-top: solid #334155;
+    background: $wizard-header-bg;
+    color: $wizard-footer-fg;
+    border-top: solid $wizard-border;
 }
 
 FooterKey {
-    background: #11182700;
+    background: $wizard-header-bg;
+}
+
+FooterKey.-command-palette {
+    background: $wizard-header-bg;
+}
+
+FooterKey.-grouped {
+    background: $wizard-header-bg;
 }
 
 FooterKey .footer-key--key {
-    background: #ff358d00;
-    color: #ff358d;
+    background: $wizard-header-bg;
+    color: $wizard-accent;
     text-style: bold;
 }
 
 FooterKey .footer-key--description {
-    color: #cbd5e1;
+    background: $wizard-header-bg;
+    color: $wizard-status-fg;
 }
 
 FooterLabel {
-    color: #94a3b8;
+    background: $wizard-header-bg;
+    color: $wizard-footer-fg;
 }
 
 #panes {
     height: 1fr;
     padding: 1 2;
-    background: #0b0f19;
+    background: $wizard-panel-bg;
 }
 
 MediaBrowser {
     width: 1fr;
     margin: 0 1;
-    border: solid #1f2937;
-    background: #11182700;
-    color: #bbb6e2;
+    border: solid $wizard-browser-border;
+    background: $wizard-header-bg;
+    color: $wizard-browser-fg;
     padding: 0 1;
     scrollbar-size-vertical: 1;
     scrollbar-size-horizontal: 0;
     scrollbar-color: #64748b 45%;
     scrollbar-color-hover: #6c7d95 50%;
     scrollbar-color-active: #6c7d95;
-    scrollbar-background: #0b0f1900;
-    scrollbar-background-hover: #0b0f1900;
-    scrollbar-background-active: #0b0f1900;
+    scrollbar-background: transparent;
+    scrollbar-background-hover: transparent;
+    scrollbar-background-active: transparent;
 }
 
 MediaBrowser:focus,
 MediaBrowser:hover {
-    border: solid #ff358d;
+    border: solid $wizard-accent;
 }
 
 MediaBrowser .tree--cursor {
-    background: #141abcbb;
-    color: #0b0f1900;
+    background: $wizard-cursor-bg;
+    color: $wizard-cursor-fg;
+}
+
+MediaBrowser .tree--guides,
+MediaBrowser .tree--guides-hover,
+MediaBrowser .tree--guides-selected {
+    background: $wizard-header-bg;
+}
+
+MediaBrowser .tree--highlight,
+MediaBrowser .tree--highlight-line {
+    background: $wizard-header-bg;
 }
 
 MediaBrowser .tree--cursor-line {
-    background: #1e293b00;
+    background: $wizard-cursor-line-bg;
 }
 
 MediaBrowser .tree--branch,
 MediaBrowser .tree--guide {
-    color: #47556900;
+    color: $wizard-guide-fg;
 }
 
 #status {
     height: 3;
     padding: 0 2;
     content-align: left middle;
-    background: #0f172a00;
-    color: #cbd5e1;
-    border-top: solid #1f2937;
+    background: $wizard-panel-bg;
+    color: $wizard-status-fg;
+    border-top: solid $wizard-browser-border;
 }
 
 #sort-indicator {
@@ -105,6 +145,6 @@ MediaBrowser .tree--guide {
     padding: 0 2;
     /* align to the right under the media panes */
     content-align: right middle;
-    color: #94a3b8;
+    color: $wizard-sort-fg;
     margin: 0 1;
 }

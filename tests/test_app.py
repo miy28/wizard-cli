@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from wizardcli.app import WizardApp
+from wizardcli.ui import WizardApp
 from wizardcli.config import default_config
 
 

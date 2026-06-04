@@ -35,11 +35,37 @@ def fetch_similar_artists(api_key: str, artist_names: list[str], limit: int = 10
     return sorted(related)
 
 
+def fetch_top_tags(api_key: str, artist_name: str, limit: int = 10) -> list[str]:
+    if not api_key or not artist_name:
+        return []
+
+    params = {
+        "method": "artist.getTopTags",
+        "artist": artist_name,
+        "api_key": api_key,
+        "format": "json",
+        "limit": limit,
+    }
+    response = requests.get(LASTFM_ENDPOINT, params=params, timeout=15)
+    response.raise_for_status()
+    payload = response.json()
+    tags = payload.get("toptags", {}).get("tag", [])
+    results: list[str] = []
+    for item in tags:
+        name = item.get("name") if isinstance(item, dict) else None
+        if name:
+            results.append(name)
+    return results
+
+
 def build_metadata_context(
     artist_names: list[str],
     analysis: AudioAnalysisResult,
     lastfm_api_key: str | None = None,
+    lastfm_session_key: str | None = None,
 ) -> MetadataContext:
+    # Currently we only use the API key for public endpoints (artist.getsimilar).
+    # The session key is accepted and forwarded for future authenticated calls.
     related = fetch_similar_artists(lastfm_api_key or "", artist_names) if lastfm_api_key else []
     keywords = _normalize_keywords([*artist_names, *related, analysis.key, f"{int(round(analysis.bpm))} bpm"])
     summary = ", ".join(keywords[:12])
