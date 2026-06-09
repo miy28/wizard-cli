@@ -20,6 +20,7 @@ def run_pipeline(
     beat: Path,
     cover: Path,
     artist_names: list[str],
+    descriptors: list[str] | None,
     title: str,
     body: str,
     lastfm_api_key: str | None = None,
@@ -27,9 +28,20 @@ def run_pipeline(
 ) -> PipelineResult:
     ensure_directory(config.artifacts_dir)
 
-    selection = MediaSelection(beat=beat, cover=cover, artist_names=artist_names)
+    selection = MediaSelection(
+        beat=beat,
+        cover=cover,
+        artist_names=artist_names,
+        query_terms=descriptors or [],
+    )
     analysis = analyze_audio(selection.beat, config.analysis_confidence_threshold)
-    metadata = build_metadata_context(artist_names, analysis, lastfm_api_key, lastfm_session_key)
+    metadata = build_metadata_context(
+        artist_names,
+        analysis,
+        lastfm_api_key,
+        lastfm_session_key,
+        descriptors=descriptors,
+    )
     template = load_template(config.template_path)
     description = compile_description(template, metadata, title=title, body=body)
     rendered = render_video(config, selection, analysis)

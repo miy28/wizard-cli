@@ -29,6 +29,6 @@ def test_lastfm_round_trip_uses_api_and_builds_context() -> None:
     assert context.bpm == 142.0
     assert context.key == "A minor"
     assert "Kendrick Lamar" in context.keywords
-    assert "A minor" in context.keywords
-    assert "142 bpm" in context.keywords
+    assert "A minor" not in context.keywords
+    assert "142 bpm" not in context.keywords
     assert context.summary.startswith("Kendrick Lamar")
