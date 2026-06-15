@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from wizardcli.audio import PlaybackController
+from wizardcli.audio import PlaybackController, _first_available_executable
 
 
 class FakeProcess:
@@ -83,6 +83,32 @@ def test_seek_sends_relative_command(tmp_path: Path) -> None:
     assert transport.sent[-1] == ["seek", 7.5, "relative"]
 
 
+def test_preview_reuses_mpv_for_next_file(tmp_path: Path) -> None:
+    process = FakeProcess()
+    transport = FakeTransport()
+    commands: list[list[str]] = []
+
+    controller = PlaybackController(
+        mpv_executable="mpv",
+        process_factory=lambda command: commands.append(command) or process,
+        transport_factory=lambda _address: transport,
+    )
+
+    first = tmp_path / "first.mp3"
+    second = tmp_path / "second.mp3"
+    first.write_text("x", encoding="utf-8")
+    second.write_text("x", encoding="utf-8")
+
+    controller.preview(first)
+    controller.preview(second)
+
+    assert len(commands) == 1
+    assert transport.sent == [
+        ["loadfile", str(first.resolve()), "replace"],
+        ["loadfile", str(second.resolve()), "replace"],
+    ]
+
+
 def test_stop_closes_transport_and_terminates_process() -> None:
     process = FakeProcess()
     transport = FakeTransport()
@@ -99,3 +125,19 @@ def test_stop_closes_transport_and_terminates_process() -> None:
 
     assert transport.closed is True
     assert process.waited is True
+
+
+def test_executable_resolver_skips_stale_configured_path(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    working_mpv = tmp_path / "mpv"
+    working_mpv.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "wizardcli.audio.shutil.which",
+        lambda value: str(working_mpv) if value == "mpv" else None,
+    )
+
+    resolved = _first_available_executable("C:\\missing\\mpv.exe", "mpv")
+
+    assert resolved == str(working_mpv)

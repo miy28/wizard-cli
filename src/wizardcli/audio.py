@@ -129,11 +129,11 @@ class PlaybackController:
         except Exception:
             config_path_value = None
 
-        self._mpv_executable = (
-            mpv_executable
-            or env_path
-            or config_path_value
-            or "mpv"
+        self._mpv_executable = _first_available_executable(
+            mpv_executable,
+            env_path,
+            config_path_value,
+            "mpv",
         )
         self._seek_step_seconds = seek_step_seconds
         self._process_factory = process_factory or self._default_process_factory
@@ -154,13 +154,14 @@ class PlaybackController:
         if self._current_path == audio_path and self._process and self._process.poll() is None:
             if not restart:
                 return
-            self.stop()
 
-        self.stop()
-        self._ipc_address = self._build_ipc_address()
-        command = self._build_command(self._ipc_address)
-        self._process = self._process_factory(command)
-        self._transport = self._connect_transport(self._ipc_address)
+        if self._process is None or self._process.poll() is not None or self._transport is None:
+            self.stop()
+            self._ipc_address = self._build_ipc_address()
+            command = self._build_command(self._ipc_address)
+            self._process = self._process_factory(command)
+            self._transport = self._connect_transport(self._ipc_address)
+
         self._send(["loadfile", str(audio_path), "replace"])
         self._current_path = audio_path
 
@@ -291,3 +292,16 @@ class PlaybackController:
         if os.name == "nt":
             return _WindowsPipeConnection(ipc_address)
         return _UnixSocketConnection(ipc_address)
+
+
+def _first_available_executable(*candidates: str | None) -> str:
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate).expanduser()
+        if path.is_file():
+            return str(path)
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+    return "mpv"

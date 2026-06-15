@@ -11,6 +11,7 @@ from textual.widgets import DirectoryTree
 
 class MediaBrowser(DirectoryTree):
     def __init__(self, root: Path, label: str, **kwargs) -> None:
+        self.ICON_FILE = "♫ " if label == "songs" else "▧ "
         super().__init__(path=root, name=label, **kwargs)
         self.media_root = root
         self.border_title = label.capitalize()

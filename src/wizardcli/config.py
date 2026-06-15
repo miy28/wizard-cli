@@ -1,14 +1,21 @@
 from __future__ import annotations
 
+import json
 import os
+import platform
 from dataclasses import dataclass
 from pathlib import Path
-import json
 from typing import Optional
 
 
-DEFAULT_SONGS_DIR = Path("G:/My Drive/studio/cooks")
-DEFAULT_COVERS_DIR = Path("G:/My Drive/studio/covers")
+WINDOWS_GOOGLE_DRIVE_ROOT = Path("G:/My Drive")
+MACOS_GOOGLE_DRIVE_GLOB = "GoogleDrive-*/My Drive"
+STUDIO_SONGS_PATH = Path("studio/cooks")
+STUDIO_COVERS_PATH = Path("studio/covers")
+
+# Kept as aliases for callers that imported the original Windows defaults.
+DEFAULT_SONGS_DIR = WINDOWS_GOOGLE_DRIVE_ROOT / STUDIO_SONGS_PATH
+DEFAULT_COVERS_DIR = WINDOWS_GOOGLE_DRIVE_ROOT / STUDIO_COVERS_PATH
 
 
 @dataclass(frozen=True)
@@ -31,15 +38,21 @@ def default_config(
     covers_dir: Path | str | None = None,
 ) -> AppConfig:
     root = root_dir or Path.cwd()
+    songs_override = songs_dir or os.getenv("WIZARDCLI_SONGS_DIR")
+    covers_override = covers_dir or os.getenv("WIZARDCLI_COVERS_DIR")
+    default_songs_dir = default_covers_dir = None
+    if not songs_override or not covers_override:
+        default_songs_dir, default_covers_dir = platform_media_dirs(
+            platform_name=platform.system(),
+            home_dir=Path.home(),
+        )
     songs_root = Path(
-        songs_dir
-        or os.getenv("WIZARDCLI_SONGS_DIR")
-        or DEFAULT_SONGS_DIR
+        songs_override
+        or default_songs_dir
     )
     covers_root = Path(
-        covers_dir
-        or os.getenv("WIZARDCLI_COVERS_DIR")
-        or DEFAULT_COVERS_DIR
+        covers_override
+        or default_covers_dir
     )
     return AppConfig(
         root_dir=root,
@@ -50,6 +63,31 @@ def default_config(
         client_secrets_path=root / "client_secrets.json",
         oauth_token_path=root / "token.json",
     )
+
+
+def platform_media_dirs(
+    platform_name: str,
+    home_dir: Path,
+) -> tuple[Path, Path]:
+    if platform_name == "Windows":
+        return DEFAULT_SONGS_DIR, DEFAULT_COVERS_DIR
+
+    if platform_name == "Darwin":
+        cloud_storage = home_dir / "Library/CloudStorage"
+        drive_roots = sorted(cloud_storage.glob(MACOS_GOOGLE_DRIVE_GLOB))
+        if drive_roots:
+            drive_root = next(
+                (
+                    candidate
+                    for candidate in drive_roots
+                    if (candidate / STUDIO_SONGS_PATH).is_dir()
+                    or (candidate / STUDIO_COVERS_PATH).is_dir()
+                ),
+                drive_roots[0],
+            )
+            return drive_root / STUDIO_SONGS_PATH, drive_root / STUDIO_COVERS_PATH
+
+    return home_dir / "Music/wizard-cli/songs", home_dir / "Music/wizard-cli/covers"
 
 
 # Simple per-user credentials helper (file-based). This is intentionally

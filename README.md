@@ -1,54 +1,139 @@
-this was totally vibe coded
-
 # wizard-cli
 
-Hybrid Textual/CLI pipeline for selecting beats and covers from Google Drive-mounted folders, generating metadata, rendering video with ffmpeg, and publishing to YouTube.
+**A hardware-accelerated, keyboard-first publishing workstation for turning deep beat archives into finished SEO-optimized uploads.**
 
-## Defaults
+Move through your massive library of cooks, hear each track immediately, seek without leaving the keyboard, commit the right song, and pair it with the desired visual.
 
-- Beats: `G:/My Drive/studio/cooks`
-- Covers: `G:/My Drive/studio/covers`
+The metadata generator, FFmpeg renderer, and eventual YouTube uploader are one pipeline attached to that browsing experience. The goal is to preserve creative momentum from rediscovering a beat through packaging and publishing it.
 
-You can override those roots with `--songs-dir`, `--covers-dir`, or the matching `WIZARDCLI_SONGS_DIR` / `WIZARDCLI_COVERS_DIR` environment variables.
+## Intended Workflow
 
-## Audio preview
+The interface is organized around four user actions:
 
-- `wizardcli` now uses `mpv` for live preview playback.
-- Install `mpv` and make sure it is on `PATH`.
-- Move through beats to preview immediately, then use left/right to seek while a beat is active.
+1. **Song** - browse, preview, seek, and commit an mp3.
+2. **Cover** - browse and commit still or animated (gif) artwork.
+3. **Description** - enter artists and descriptors, generate metadata, adjust seeds, or regenerate a new variation.
+4. **Review** - validate the assembled job, render the MP4 with accelerated FFmpeg (currently macOS only), review it, and publish.
 
-## Metadata and tag generation
+## Current Status
 
-Headless runs can generate YouTube-shaped keyword phrases from artists and descriptors:
+Working today:
 
-```powershell
-wizard-cli run --beat beat.wav --cover cover.png --artists "Lil Uzi Vert, Playboi Carti" --descriptors "ambient, rage, dnb, beat switch"
+- Stage-based Textual browser for beat and cover libraries
+- Four-stage keyboard navigation with a stage-aware preview pane
+- Automatic Google Drive for Desktop discovery on macOS
+- Immediate beat preview through a persistent `mpv` process
+- Keyboard seeking, pause, mute, sorting, and quick navigation
+- Independent beat and cover selection
+- Headless audio analysis, metadata generation, description compilation, and FFmpeg rendering
+- Last.fm-assisted similar-artist and descriptor discovery
+- YouTube-shaped keyword generation within a 500-character budget
+
+Still being built:
+
+- Artist, descriptor, title, and description editing in the UI
+- Metadata preview and regeneration
+- Review, validation, render progress, and cancellation
+- Rendered-video approval
+- YouTube OAuth, tags, and upload
+
+## macOS System Dependencies
+
+Install the external command-line tools with Homebrew:
+
+```bash
+brew install mpv ffmpeg chafa
 ```
 
-Current flow:
+- `mpv` provides fast audio preview and seeking.
+- `ffmpeg` renders the selected song and cover into a YouTube-ready MP4.
+- `chafa` renders cover images and GIF still frames inside the terminal preview pane.
 
-- User-provided artists are guaranteed modifiers.
-- If two or more artists are provided, wizard-cli also adds one combined modifier from the first two artists, such as `Lil Uzi Vert x Playboi Carti`.
-- User-provided descriptors are guaranteed modifiers. Descriptors can be genres, moods, structures, or loose search terms.
-- If a Last.fm API key is configured, `artist.getSimilar` fills a sampled similar-artist bucket.
-- If a Last.fm API key is configured, `artist.getTopTags` fills a sampled descriptor bucket.
-- The generator creates single-seed phrases such as `{seed} type beat`, `{seed} type beat 2026`, `free {seed} type beat`, `free {seed} beat`, `{seed} beat`, and `{seed} instrumental`.
-- The generator also creates artist/descriptor combinations in both orders, such as `ambient Izaya Tiji type beat` and `Izaya Tiji ambient type beat`.
-- Keywords are SEO/tag phrases only. Audio analysis fields like BPM and key stay separate and are available through `{bpm}` and `{key}` in the description template.
-- Keywords are deduped and packed into a 500-character, 30-keyword budget before being rendered into the description template.
+Verify the tools are available:
 
-Not wired yet:
+```bash
+mpv --version
+ffmpeg -version
+chafa --version
+```
 
-- UI-mode controls for entering artists/descriptors and invoking this generator.
-- Persistent candidate pools for regenerating without requerying Last.fm.
-- YouTube autocomplete expansion for RapidTags-style search phrases.
-- YouTube competitor tag extraction.
-- A dedicated YouTube upload `tags` field. Generated keywords currently render through the description template.
+## Controls
 
-## Layout
+| Key | Action |
+| --- | --- |
+| `Up` / `Down` | Browse files and preview highlighted beats |
+| `Left` / `Right` | Seek backward or forward 5 seconds |
+| `Shift+Left` / `Shift+Right` | Seek backward or forward 10 seconds |
+| `Space` | Play or pause |
+| `m` | Mute or unmute |
+| `p` | Restart the highlighted preview |
+| `s` | Cycle sorting mode |
+| `Ctrl+Up` / `Ctrl+Down` | Jump to the top or bottom |
+| `Enter` | Commit the selected beat or cover; committed covers open a large preview |
+| `Escape` | Return from the large cover preview to the browser |
+| `1` / `2` / `3` / `4` | Switch between Song, Cover, Description, and Review |
+| `q` | Quit |
 
-- `src/wizardcli/` - app, CLI, analysis, pipeline, and publishing code
+## Media Libraries
 
-## Next step
+Default locations:
 
-Install dependencies and run `wizard-cli --help` once the first implementation slice is in place.
+- Windows: `G:/My Drive/studio/cooks` and `G:/My Drive/studio/covers`
+- macOS: auto-detected under `~/Library/CloudStorage/GoogleDrive-*/My Drive/studio`
+- Other platforms: `~/Music/wizard-cli/songs` and `~/Music/wizard-cli/covers`
+
+Override either location with CLI arguments:
+
+```bash
+wizard-cli \
+  --songs-dir "/path/to/beats" \
+  --covers-dir "/path/to/covers" \
+  ui
+```
+
+Or environment variables:
+
+```bash
+export WIZARDCLI_SONGS_DIR="/path/to/beats"
+export WIZARDCLI_COVERS_DIR="/path/to/covers"
+```
+
+For Google Drive libraries, marking the folders **Available offline** avoids a download delay on the first preview.
+
+## Headless Pipeline
+
+The current end-to-end local pipeline is available through `run`:
+
+```bash
+wizard-cli run \
+  --beat "beat.mp3" \
+  --cover "cover.png" \
+  --artists "Lil Uzi Vert, Playboi Carti" \
+  --descriptors "ambient, rage, dnb, beat switch" \
+  --title "Beat title" \
+  --body "Description body"
+```
+
+This resolves the media files, analyzes BPM and key, generates metadata, compiles `template.md`, and renders a 2560x1440 MP4 into `artifacts/`.
+
+The `--publish` flag is reserved for YouTube publishing, which is not wired yet.
+
+## Metadata Generation
+
+- User-provided artists and descriptors are always included.
+- The first two artists also produce a combined modifier such as `Lil Uzi Vert x Playboi Carti`.
+- A configured Last.fm API key can add sampled similar artists and top tags.
+- Phrases include variants such as `{seed} type beat`, `free {seed} beat`, and `{seed} instrumental`.
+- Artist and descriptor combinations are generated in both orders.
+- BPM and key remain separate template fields rather than SEO keywords.
+- Keywords are deduplicated and packed into a maximum of 30 phrases and 500 characters.
+
+## Project Layout
+
+- `src/wizardcli/ui.py` - Textual application and interaction state
+- `src/wizardcli/browser.py` - media browsing and sorting
+- `src/wizardcli/audio.py` - persistent `mpv` playback controller
+- `src/wizardcli/pipeline.py` - analysis, metadata, description, and FFmpeg orchestration
+- `src/wizardcli/metadata.py` - Last.fm enrichment and keyword generation
+- `src/wizardcli/publisher.py` - future YouTube publishing
+- `tests/` - unit and integration tests

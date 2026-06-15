@@ -1,4 +1,4 @@
-/* Opaque theme values preserved here so the UI keeps its original dark surfaces. */
+/* One continuous surface; structure comes from borders, spacing, and text. */
 $wizard-fg: #e5e7eb;
 $wizard-header-fg: #dbeafe;
 $wizard-title-fg: #ff849f;
@@ -6,20 +6,17 @@ $wizard-user-fg: #3f86e9;
 $wizard-footer-fg: #94a3b8;
 $wizard-border: #334155;
 $wizard-browser-border: #1f2937;
-$wizard-browser-fg: #bbb6e2;
-$wizard-cursor-bg: #141abcbb;
-$wizard-cursor-fg: #0b0f19;
-$wizard-cursor-line-bg: #1e293b;
+$wizard-browser-fg: #cbd5e1;
 $wizard-guide-fg: #475569;
 $wizard-accent: #ff358d;
 $wizard-status-fg: #cbd5e1;
 $wizard-sort-fg: #94a3b8;
-$wizard-panel-bg: #0b0f19;
-$wizard-header-bg: #111827;
+$wizard-bg-solid: #0b0f19;
+$wizard-bg: ansi_default;
 
 Screen {
     layout: vertical;
-    background: $wizard-panel-bg;
+    background: $wizard-bg;
     color: $wizard-fg;
 }
 
@@ -28,7 +25,7 @@ AppHeader {
     height: auto;
     padding: 1 3;
     color: $wizard-header-fg;
-    background: $wizard-header-bg;
+    background: $wizard-bg;
     border-bottom: solid $wizard-border;
 }
 
@@ -45,50 +42,82 @@ AppHeader #app-user-host {
 Footer {
     dock: bottom;
     height: 3;
-    background: $wizard-header-bg;
+    background: $wizard-bg;
     color: $wizard-footer-fg;
     border-top: solid $wizard-border;
 }
 
 FooterKey {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
 }
 
 FooterKey.-command-palette {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
 }
 
 FooterKey.-grouped {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
 }
 
 FooterKey .footer-key--key {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
     color: $wizard-accent;
     text-style: bold;
 }
 
 FooterKey .footer-key--description {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
     color: $wizard-status-fg;
 }
 
 FooterLabel {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
     color: $wizard-footer-fg;
 }
 
-#panes {
+#stage-indicator {
+    height: 3;
+    padding: 1 3 0 3;
+    background: $wizard-bg;
+    color: $wizard-status-fg;
+}
+
+#workspace {
     height: 1fr;
     padding: 1 2;
-    background: $wizard-panel-bg;
+    background: $wizard-bg;
+}
+
+#stage-switcher,
+#stage-preview {
+    width: 1fr;
+    height: 1fr;
+    margin: 0 1;
+    border: solid $wizard-browser-border;
+    background: $wizard-bg;
+}
+
+#stage-switcher {
+    overflow: hidden;
+}
+
+#stage-switcher:focus-within {
+    border: solid $wizard-accent;
+}
+
+#workspace.cover-detail #stage-switcher {
+    display: none;
+}
+
+#workspace.cover-detail #stage-preview {
+    width: 1fr;
 }
 
 MediaBrowser {
     width: 1fr;
-    margin: 0 1;
-    border: solid $wizard-browser-border;
-    background: $wizard-header-bg;
+    height: 1fr;
+    border: none;
+    background: $wizard-bg;
     color: $wizard-browser-fg;
     padding: 0 1;
     scrollbar-size-vertical: 1;
@@ -103,27 +132,28 @@ MediaBrowser {
 
 MediaBrowser:focus,
 MediaBrowser:hover {
-    border: solid $wizard-accent;
+    border: none;
 }
 
 MediaBrowser .tree--cursor {
-    background: $wizard-cursor-bg;
-    color: $wizard-cursor-fg;
+    background: $wizard-bg;
+    color: $wizard-accent;
+    text-style: bold;
 }
 
 MediaBrowser .tree--guides,
 MediaBrowser .tree--guides-hover,
 MediaBrowser .tree--guides-selected {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
 }
 
 MediaBrowser .tree--highlight,
 MediaBrowser .tree--highlight-line {
-    background: $wizard-header-bg;
+    background: $wizard-bg;
 }
 
 MediaBrowser .tree--cursor-line {
-    background: $wizard-cursor-line-bg;
+    background: $wizard-bg;
 }
 
 MediaBrowser .tree--branch,
@@ -131,11 +161,48 @@ MediaBrowser .tree--guide {
     color: $wizard-guide-fg;
 }
 
+.stage-placeholder {
+    width: 1fr;
+    height: 1fr;
+    padding: 2 3;
+    background: $wizard-bg;
+    color: $wizard-status-fg;
+}
+
+#stage-preview {
+    overflow-y: auto;
+    scrollbar-size-vertical: 1;
+    scrollbar-size-horizontal: 0;
+    scrollbar-color: #64748b 45%;
+    scrollbar-color-hover: #6c7d95 50%;
+    scrollbar-color-active: #6c7d95;
+    scrollbar-background: transparent;
+    scrollbar-background-hover: transparent;
+    scrollbar-background-active: transparent;
+}
+
+#stage-preview-art,
+#stage-preview-content {
+    width: 1fr;
+    height: auto;
+    background: $wizard-bg;
+    color: $wizard-status-fg;
+    content-align: center top;
+}
+
+#stage-preview-art {
+    padding: 1 1 0 1;
+}
+
+#stage-preview-content {
+    padding: 1 3 2 3;
+}
+
 #status {
     height: 3;
     padding: 0 2;
     content-align: left middle;
-    background: $wizard-panel-bg;
+    background: $wizard-bg;
     color: $wizard-status-fg;
     border-top: solid $wizard-browser-border;
 }
