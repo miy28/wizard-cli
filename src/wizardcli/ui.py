@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import json
-import socket
 from datetime import datetime
-from getpass import getuser
 from pathlib import Path
 
 from rich.text import Text
-from textual import work
+from textual import events, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
+from textual.scrollbar import ScrollTo
 from textual.worker import get_current_worker
 from textual.widgets import ContentSwitcher, Footer, Label, Static
 
@@ -29,15 +28,150 @@ STAGES = {
     4: ("Review", "stage-review"),
 }
 
+POINTER_SCROLL_INTERVAL = 0.04
+DETAIL_KEY_SCROLL_ROWS = 5
+
+
+def _cover_preview_dimensions(
+    container_width: int,
+    container_height: int,
+    detail: bool,
+) -> tuple[int, int]:
+    width = max(8, container_width - 4)
+    if not detail:
+        # Chafa preserves the source image's aspect ratio inside this bounding
+        # box. In pick view, bound by both axes so the whole cover fits in the
+        # right-side preview pane.
+        height = max(4, container_height - 4)
+        return width, height
+    height = max(4, (width + 1) // 2)
+    return width, height
+
+
+class CoverPreviewScroll(VerticalScroll):
+    BINDINGS = [
+        *VerticalScroll.BINDINGS,
+        Binding("ctrl+up", "cover_detail_scroll_top", "Top", show=False, priority=True),
+        Binding("ctrl+down", "cover_detail_scroll_bottom", "Bottom", show=False, priority=True),
+    ]
+
+    def __init__(self, *children, **kwargs) -> None:
+        super().__init__(*children, **kwargs)
+        self.coalesce_pointer_scroll = False
+        self.suppress_pointer_scroll = False
+        self.fast_key_scroll = False
+        self._pending_pointer_delta = 0.0
+        self._pending_pointer_y: float | None = None
+        self._pointer_scroll_scheduled = False
+
+    def set_pointer_coalescing(
+        self,
+        enabled: bool,
+        *,
+        suppress: bool = False,
+    ) -> None:
+        self.coalesce_pointer_scroll = enabled
+        self.suppress_pointer_scroll = suppress
+        self.fast_key_scroll = enabled
+        if not enabled:
+            self._pending_pointer_delta = 0.0
+            self._pending_pointer_y = None
+
+    def _schedule_pointer_scroll(self) -> None:
+        if self._pointer_scroll_scheduled:
+            return
+        self._pointer_scroll_scheduled = True
+        self.set_timer(POINTER_SCROLL_INTERVAL, self._flush_pointer_scroll)
+
+    def _queue_pointer_delta(self, delta: float) -> None:
+        self._pending_pointer_delta += delta
+        self._schedule_pointer_scroll()
+
+    def _queue_pointer_position(self, y: float | None) -> None:
+        if y is not None:
+            self._pending_pointer_y = y
+            self._pending_pointer_delta = 0.0
+            self._schedule_pointer_scroll()
+
+    def _flush_pointer_scroll(self) -> None:
+        self._pointer_scroll_scheduled = False
+        pending_y = self._pending_pointer_y
+        pending_delta = self._pending_pointer_delta
+        self._pending_pointer_y = None
+        self._pending_pointer_delta = 0.0
+
+        if pending_y is not None:
+            self.scroll_to(y=pending_y, animate=False, immediate=True)
+        elif pending_delta:
+            self.scroll_relative(y=pending_delta, animate=False, immediate=True)
+
+    def _on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        self.on_mouse_scroll_down(event)
+
+    def on_mouse_scroll_down(self, event: events.MouseScrollDown) -> None:
+        if self.suppress_pointer_scroll:
+            event.prevent_default()
+            event.stop()
+            return
+        if not self.coalesce_pointer_scroll:
+            super()._on_mouse_scroll_down(event)
+            return
+        self._queue_pointer_delta(self.app.scroll_sensitivity_y)
+        event.stop()
+
+    def _on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        self.on_mouse_scroll_up(event)
+
+    def on_mouse_scroll_up(self, event: events.MouseScrollUp) -> None:
+        if self.suppress_pointer_scroll:
+            event.prevent_default()
+            event.stop()
+            return
+        if not self.coalesce_pointer_scroll:
+            super()._on_mouse_scroll_up(event)
+            return
+        self._queue_pointer_delta(-self.app.scroll_sensitivity_y)
+        event.stop()
+
+    def _on_scroll_to(self, message: ScrollTo) -> None:
+        self.on_scroll_to(message)
+
+    def on_scroll_to(self, message: ScrollTo) -> None:
+        if self.suppress_pointer_scroll:
+            message.prevent_default()
+            message.stop()
+            return
+        if not self.coalesce_pointer_scroll:
+            super()._on_scroll_to(message)
+            return
+        self._queue_pointer_position(message.y)
+        message.stop()
+
+    def action_scroll_down(self) -> None:
+        if not self.fast_key_scroll:
+            super().action_scroll_down()
+            return
+        self.scroll_relative(y=DETAIL_KEY_SCROLL_ROWS, animate=False, immediate=True)
+
+    def action_scroll_up(self) -> None:
+        if not self.fast_key_scroll:
+            super().action_scroll_up()
+            return
+        self.scroll_relative(y=-DETAIL_KEY_SCROLL_ROWS, animate=False, immediate=True)
+
+    def action_cover_detail_scroll_bottom(self) -> None:
+        if not self.fast_key_scroll:
+            return
+        self.scroll_end(animate=False, immediate=True)
+
+    def action_cover_detail_scroll_top(self) -> None:
+        if not self.fast_key_scroll:
+            return
+        self.scroll_home(animate=False, immediate=True)
+
 
 def get_user_host_string() -> Text:
-    try:
-        username = getuser()
-        hostname = socket.gethostname()
-        # return Text.from_markup(f"{username}@{hostname}")
-        return Text.from_markup("mikeyy")
-    except Exception:
-        return Text("unknown@unknown")
+    return Text.from_markup("mikeyy")
 
 
 class AppHeader(Horizontal):
@@ -112,7 +246,7 @@ class WizardApp(App):
                     id="stage-review",
                     classes="stage-placeholder",
                 )
-            with VerticalScroll(id="stage-preview"):
+            with CoverPreviewScroll(id="stage-preview"):
                 yield Static("", id="stage-preview-art")
                 yield Static("", id="stage-preview-content")
         yield Label("Sort: Default", id="sort-indicator")
@@ -164,11 +298,21 @@ class WizardApp(App):
                 if number != len(STAGES):
                     indicator.append("   ")
             self.query_one("#stage-indicator", Label).update(indicator)
-            self.query_one("#stage-preview-content", Static).update(self._stage_preview())
+            preview_text: Text | str
+            if self._active_stage == 2 and not self._cover_detail:
+                preview_text = ""
+            else:
+                preview_text = self._stage_preview()
+            self.query_one("#stage-preview-content", Static).update(preview_text)
             art = self.query_one("#stage-preview-art", Static)
             art.display = self._active_stage == 2
             if self._active_stage != 2:
                 art.update("")
+            preview = self.query_one("#stage-preview", CoverPreviewScroll)
+            preview.set_pointer_coalescing(
+                self._cover_detail,
+                suppress=self._active_stage == 2 and not self._cover_detail,
+            )
         except Exception:
             pass
 
@@ -428,12 +572,24 @@ class WizardApp(App):
 
     def action_jump_top(self) -> None:
         """Jump to top in the focused MediaBrowser, or the first one if none focused."""
+        if self._cover_detail:
+            try:
+                self.query_one("#stage-preview", CoverPreviewScroll).action_cover_detail_scroll_top()
+            except Exception:
+                pass
+            return
         browser = self._active_browser()
         if browser is not None:
             browser.jump_top()
 
     def action_jump_bottom(self) -> None:
         """Jump to bottom in the focused MediaBrowser, or the first one if none focused."""
+        if self._cover_detail:
+            try:
+                self.query_one("#stage-preview", CoverPreviewScroll).action_cover_detail_scroll_bottom()
+            except Exception:
+                pass
+            return
         browser = self._active_browser()
         if browser is not None:
             browser.jump_bottom()
@@ -509,9 +665,17 @@ class WizardApp(App):
 
         if source_id == "stage-song":
             self._committed_beat = path
+            try:
+                self.query_one("#stage-song", MediaBrowser).set_committed_path(path)
+            except Exception:
+                pass
             self.set_activity(f"Committed beat: {path}")
         elif source_id == "stage-cover":
             self._committed_cover = path
+            try:
+                self.query_one("#stage-cover", MediaBrowser).set_committed_path(path)
+            except Exception:
+                pass
             self.set_activity(f"Committed cover: {path}")
         self._refresh_stage_view()
         if source_id == "stage-cover":
@@ -523,9 +687,20 @@ class WizardApp(App):
             workspace = self.query_one("#workspace", Horizontal)
             if enabled:
                 workspace.add_class("cover-detail")
-                self.query_one("#stage-preview", VerticalScroll).focus()
+                preview = self.query_one("#stage-preview", CoverPreviewScroll)
+                preview.set_pointer_coalescing(True)
+                preview.focus()
+                self.query_one("#stage-preview-content", Static).update(self._stage_preview())
                 self.set_activity("Cover committed. Press Esc to return to the browser.")
             else:
+                preview = self.query_one("#stage-preview", CoverPreviewScroll)
+                preview.set_pointer_coalescing(False, suppress=True)
+                try:
+                    self.query_one("#stage-preview-art", Static).update("")
+                    self.query_one("#stage-preview-content", Static).update("")
+                    preview.scroll_to(y=0, animate=False, immediate=True)
+                except Exception:
+                    pass
                 workspace.remove_class("cover-detail")
                 if self._active_stage == 2:
                     self.query_one("#stage-cover", MediaBrowser).focus()
@@ -585,11 +760,12 @@ class WizardApp(App):
             return
 
         try:
-            container = self.query_one("#stage-preview", VerticalScroll)
-            width = max(8, container.size.width - 4)
-            # Terminal cells are roughly twice as tall as they are wide.
-            # A square cover therefore needs one row per two columns.
-            height = max(4, (width + 1) // 2)
+            container = self.query_one("#stage-preview", CoverPreviewScroll)
+            width, height = _cover_preview_dimensions(
+                container.size.width,
+                container.size.height,
+                self._cover_detail,
+            )
             modified = path.stat().st_mtime_ns
             art = self.query_one("#stage-preview-art", Static)
         except Exception:
@@ -618,13 +794,14 @@ class WizardApp(App):
         worker = get_current_worker()
         try:
             preview = render_cover(path, width, height)
-        except ChafaError as exc:
+        except Exception as exc:
             if not worker.is_cancelled:
+                message = str(exc) if isinstance(exc, ChafaError) else f"Cover preview failed: {exc}"
                 self.call_from_thread(
                     self._apply_cover_preview_error,
                     path,
                     generation,
-                    str(exc),
+                    message,
                 )
             return
 

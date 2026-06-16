@@ -170,7 +170,9 @@ MediaBrowser .tree--guide {
 }
 
 #stage-preview {
-    overflow-y: auto;
+    overflow-y: hidden;
+    align-horizontal: center;
+    align-vertical: middle;
     scrollbar-size-vertical: 1;
     scrollbar-size-horizontal: 0;
     scrollbar-color: #64748b 45%;
@@ -179,6 +181,12 @@ MediaBrowser .tree--guide {
     scrollbar-background: transparent;
     scrollbar-background-hover: transparent;
     scrollbar-background-active: transparent;
+}
+
+#workspace.cover-detail #stage-preview {
+    overflow-y: auto;
+    align-horizontal: center;
+    align-vertical: top;
 }
 
 #stage-preview-art,

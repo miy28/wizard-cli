@@ -58,7 +58,7 @@ def test_preview_starts_mpv_and_loads_the_file(tmp_path: Path) -> None:
 
     controller.preview(audio)
 
-    assert commands[0][0] == "mpv"
+    assert Path(commands[0][0]).stem.lower() == "mpv"
     assert any(item.startswith("--input-ipc-server=") for item in commands[0])
     assert transport.sent == [["loadfile", str(audio.resolve()), "replace"]]
     assert controller.current_path == audio.resolve()

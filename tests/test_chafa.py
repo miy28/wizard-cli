@@ -43,6 +43,8 @@ def test_render_cover_builds_terminal_safe_command(
     assert command[command.index("--relative") + 1] == "off"
     assert command[-1] == str(cover)
     assert kwargs["capture_output"] is True
+    assert kwargs["encoding"] == "utf-8"
+    assert kwargs["errors"] == "replace"
     assert preview.art.plain == "##"
 
 

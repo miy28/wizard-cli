@@ -1,25 +1,28 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import Iterable
 
+from rich.style import Style
+from rich.text import Text
 from textual import events
 from textual import work
 from textual.worker import get_current_worker
 from textual.widgets import DirectoryTree
 
 
+def _path_key(path: os.PathLike[str] | str) -> str:
+    return os.path.normcase(os.path.abspath(os.fspath(path)))
+
+
 class MediaBrowser(DirectoryTree):
+    show_root = False
+
     def __init__(self, root: Path, label: str, **kwargs) -> None:
         self.ICON_FILE = "♫ " if label == "songs" else "▧ "
         super().__init__(path=root, name=label, **kwargs)
         self.media_root = root
         self.border_title = label.capitalize()
-        # hide the root node so the tree starts inside the given path
-        try:
-            self.show_root = False
-        except Exception:
-            pass
         # sorting state
         self._sort_modes = [
             "default",
@@ -30,6 +33,23 @@ class MediaBrowser(DirectoryTree):
         ]
         self._sort_index = 0
         self.sort_mode = self._sort_modes[self._sort_index]
+        self._committed_path_key: str | None = None
+
+    def set_committed_path(self, path: Path | None) -> None:
+        self._committed_path_key = _path_key(path) if path is not None else None
+        self._clear_line_cache()
+        self.refresh()
+
+    def render_label(self, node, base_style: Style, style: Style) -> Text:
+        label = super().render_label(node, base_style, style)
+        data = getattr(node, "data", None)
+        path = getattr(data, "path", None)
+        if path is None or self._committed_path_key is None:
+            return label
+
+        if _path_key(path) == self._committed_path_key:
+            label.stylize("bold green")
+        return label
 
     def cycle_sort(self) -> str:
         """Cycle to the next sort mode and reload the tree.
@@ -134,26 +154,33 @@ class MediaBrowser(DirectoryTree):
         entries = list(self.filter_paths(self._directory_content(path, get_current_worker())))
 
         # choose key and order
+        def name_key(path: Path) -> tuple[bool, str]:
+            return not self._safe_is_dir(path), path.name.lower()
+
+        def modified_key(path: Path) -> tuple[bool, float | int]:
+            modified = path.stat().st_mtime if path.exists() else 0
+            return not self._safe_is_dir(path), modified
+
         reverse = False
         if self.sort_mode == "default":
-            key = lambda p: (not self._safe_is_dir(p), p.name.lower())
+            key = name_key
         elif self.sort_mode == "name_asc":
-            key = lambda p: (not self._safe_is_dir(p), p.name.lower())
+            key = name_key
             reverse = False
         elif self.sort_mode == "name_desc":
-            key = lambda p: (not self._safe_is_dir(p), p.name.lower())
+            key = name_key
             reverse = True
         elif self.sort_mode == "mtime_desc":
-            key = lambda p: (not self._safe_is_dir(p), p.stat().st_mtime if p.exists() else 0)
+            key = modified_key
             reverse = True
         elif self.sort_mode == "mtime_asc":
-            key = lambda p: (not self._safe_is_dir(p), p.stat().st_mtime if p.exists() else 0)
+            key = modified_key
             reverse = False
         else:
-            key = lambda p: (not self._safe_is_dir(p), p.name.lower())
+            key = name_key
 
         try:
             return sorted(entries, key=key, reverse=reverse)
         except Exception:
             # fallback to default behaviour on any error
-            return sorted(entries, key=lambda path: (not self._safe_is_dir(path), path.name.lower()))
+            return sorted(entries, key=name_key)

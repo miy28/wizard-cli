@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from wizardcli.ui import WizardApp
+from types import SimpleNamespace
+
+from rich.style import Style
+
+from wizardcli.ui import CoverPreviewScroll, WizardApp, _cover_preview_dimensions
 from wizardcli.browser import MediaBrowser
 from wizardcli.config import default_config
 
@@ -11,6 +15,18 @@ class FakeStatus:
 
     def update(self, text: str) -> None:
         self.text = text
+
+
+class FakeEvent:
+    def __init__(self) -> None:
+        self.stopped = False
+        self.default_prevented = False
+
+    def stop(self) -> None:
+        self.stopped = True
+
+    def prevent_default(self) -> None:
+        self.default_prevented = True
 
 
 class FakePlayback:
@@ -29,12 +45,268 @@ class FakePlayback:
         self.stop_calls += 1
 
 
+class FakeWorkspace:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def add_class(self, name: str) -> None:
+        self.calls.append(f"add:{name}")
+
+    def remove_class(self, name: str) -> None:
+        self.calls.append(f"remove:{name}")
+
+
+class FakePreviewPane:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def set_pointer_coalescing(self, enabled: bool, *, suppress: bool = False) -> None:
+        self.calls.append(f"coalesce:{enabled}:{suppress}")
+
+    def focus(self) -> None:
+        self.calls.append("preview-focus")
+
+    def scroll_to(self, **kwargs) -> None:
+        self.calls.append(f"scroll:{kwargs}")
+
+
+class FakeArt:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def update(self, value: str) -> None:
+        self.calls.append(f"art:{value}")
+
+
+class FakeContent:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def update(self, value) -> None:
+        self.calls.append(f"content:{value}")
+
+
+class FakeBrowser:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def focus(self) -> None:
+        self.calls.append("browser-focus")
+
+
+def test_cover_detail_preview_uses_full_width_for_scrollable_large_view() -> None:
+    width, height = _cover_preview_dimensions(240, 44, detail=True)
+
+    assert width == 236
+    assert height == 118
+
+
+def test_regular_cover_preview_fits_inside_viewport() -> None:
+    assert _cover_preview_dimensions(64, 44, detail=False) == (60, 40)
+
+
+def test_cover_preview_coalesces_pointer_wheel_events(monkeypatch) -> None:
+    preview = CoverPreviewScroll()
+    callbacks = []
+    scroll_calls = []
+    monkeypatch.setattr(
+        preview,
+        "set_timer",
+        lambda delay, callback: callbacks.append(callback),
+    )
+    monkeypatch.setattr(
+        preview,
+        "scroll_relative",
+        lambda **kwargs: scroll_calls.append(kwargs),
+    )
+
+    preview._queue_pointer_delta(3)
+    preview._queue_pointer_delta(3)
+
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert scroll_calls == [{"y": 6.0, "animate": False, "immediate": True}]
+
+
+def test_cover_preview_coalesces_scrollbar_drag_to_latest_position(monkeypatch) -> None:
+    preview = CoverPreviewScroll()
+    callbacks = []
+    scroll_calls = []
+    monkeypatch.setattr(
+        preview,
+        "set_timer",
+        lambda delay, callback: callbacks.append(callback),
+    )
+    monkeypatch.setattr(
+        preview,
+        "scroll_to",
+        lambda **kwargs: scroll_calls.append(kwargs),
+    )
+
+    preview._queue_pointer_position(12)
+    preview._queue_pointer_position(37)
+
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert scroll_calls == [{"y": 37, "animate": False, "immediate": True}]
+
+
+def test_cover_detail_arrow_scroll_moves_five_rows(monkeypatch) -> None:
+    preview = CoverPreviewScroll()
+    scroll_calls = []
+    monkeypatch.setattr(
+        preview,
+        "scroll_relative",
+        lambda **kwargs: scroll_calls.append(kwargs),
+    )
+
+    preview.set_pointer_coalescing(True)
+    preview.action_scroll_down()
+    preview.action_scroll_up()
+
+    assert scroll_calls == [
+        {"y": 5, "animate": False, "immediate": True},
+        {"y": -5, "animate": False, "immediate": True},
+    ]
+
+
+def test_cover_detail_ctrl_arrows_jump_to_top_and_bottom(monkeypatch) -> None:
+    preview = CoverPreviewScroll()
+    calls = []
+    monkeypatch.setattr(
+        preview,
+        "scroll_end",
+        lambda **kwargs: calls.append(("end", kwargs)),
+    )
+    monkeypatch.setattr(
+        preview,
+        "scroll_home",
+        lambda **kwargs: calls.append(("home", kwargs)),
+    )
+
+    preview.set_pointer_coalescing(True)
+    preview.action_cover_detail_scroll_bottom()
+    preview.action_cover_detail_scroll_top()
+
+    assert calls == [
+        ("end", {"animate": False, "immediate": True}),
+        ("home", {"animate": False, "immediate": True}),
+    ]
+
+
+def test_cover_detail_app_ctrl_jump_routes_to_preview_not_browser(tmp_path) -> None:
+    app = WizardApp(default_config(root_dir=tmp_path))
+    calls = []
+    preview = FakePreviewPane(calls)
+    browser = FakeBrowser(calls)
+    browser.jump_top = lambda: calls.append("browser-top")  # type: ignore[method-assign]
+    browser.jump_bottom = lambda: calls.append("browser-bottom")  # type: ignore[method-assign]
+    preview.action_cover_detail_scroll_top = lambda: calls.append("preview-top")  # type: ignore[attr-defined]
+    preview.action_cover_detail_scroll_bottom = lambda: calls.append("preview-bottom")  # type: ignore[attr-defined]
+
+    def fake_query_one(selector, *args, **kwargs):
+        return {
+            "#stage-preview": preview,
+            "#stage-cover": browser,
+        }[selector]
+
+    app.query_one = fake_query_one  # type: ignore[method-assign]
+    app._cover_detail = True
+    app._active_stage = 2
+
+    app.action_jump_top()
+    app.action_jump_bottom()
+
+    assert calls == ["preview-top", "preview-bottom"]
+
+
+def test_cover_preview_coalesces_pointer_scroll_in_detail_mode() -> None:
+    preview = CoverPreviewScroll()
+    callbacks = []
+    scroll_calls = []
+    preview.set_timer = lambda delay, callback: callbacks.append(callback)  # type: ignore[method-assign]
+    preview.scroll_relative = lambda **kwargs: scroll_calls.append(kwargs)  # type: ignore[method-assign]
+
+    preview.set_pointer_coalescing(True)
+    preview._queue_pointer_delta(3)
+
+    assert preview.coalesce_pointer_scroll is True
+    assert preview.suppress_pointer_scroll is False
+    callbacks[0]()
+    assert scroll_calls == [{"y": 3.0, "animate": False, "immediate": True}]
+
+
+def test_cover_pick_mode_suppresses_pointer_scroll() -> None:
+    preview = CoverPreviewScroll()
+    event = FakeEvent()
+
+    preview.set_pointer_coalescing(False, suppress=True)
+    preview._on_mouse_scroll_down(event)
+
+    assert event.stopped is True
+    assert event.default_prevented is True
+
+
+def test_exiting_cover_detail_clears_large_art_before_layout_shrinks(tmp_path) -> None:
+    app = WizardApp(default_config(root_dir=tmp_path))
+    calls = []
+    cover = tmp_path / "cover.png"
+    cover.write_text("x", encoding="utf-8")
+    app._committed_cover = cover
+    app._cover_detail = True
+    app._active_stage = 2
+
+    workspace = FakeWorkspace(calls)
+    preview = FakePreviewPane(calls)
+    art = FakeArt(calls)
+    content = FakeContent(calls)
+    browser = FakeBrowser(calls)
+
+    def fake_query_one(selector, *args, **kwargs):
+        return {
+            "#workspace": workspace,
+            "#stage-preview": preview,
+            "#stage-preview-art": art,
+            "#stage-preview-content": content,
+            "#stage-cover": browser,
+        }[selector]
+
+    app.query_one = fake_query_one  # type: ignore[method-assign]
+    app.call_after_refresh = lambda callback, path: calls.append(f"rerender:{path.name}")  # type: ignore[method-assign]
+
+    app._set_cover_detail(False)
+
+    assert calls.index("art:") < calls.index("remove:cover-detail")
+    assert calls.index("content:") < calls.index("remove:cover-detail")
+    assert "rerender:cover.png" in calls
+
+
 def test_media_browsers_use_terminal_safe_file_icons(tmp_path) -> None:
     songs = MediaBrowser(tmp_path, "songs")
     covers = MediaBrowser(tmp_path, "covers")
 
     assert songs.ICON_FILE == "♫ "
     assert covers.ICON_FILE == "▧ "
+
+
+def test_media_browsers_hide_library_root(tmp_path) -> None:
+    songs = MediaBrowser(tmp_path / "cooks", "songs")
+    covers = MediaBrowser(tmp_path / "covers", "covers")
+
+    assert songs.show_root is False
+    assert covers.show_root is False
+
+
+def test_media_browser_renders_committed_file_green(tmp_path) -> None:
+    browser = MediaBrowser(tmp_path, "songs")
+    beat = tmp_path / "beat.mp3"
+    beat.write_text("x", encoding="utf-8")
+    node = browser.root.add_leaf("beat.mp3", data=SimpleNamespace(path=beat))
+
+    browser.set_committed_path(beat)
+    label = browser.render_label(node, Style(), Style())
+
+    assert any("green" in str(span.style) for span in label.spans)
 
 
 def test_seek_temp_activity_restores_preview_status(tmp_path) -> None:
