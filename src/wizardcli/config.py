@@ -151,13 +151,11 @@ def set_lastfm_api_key(key: str) -> None:
 
 
 def get_lastfm_api_key() -> Optional[str]:
-    _ensure_user_config_template()
     data = _read_user_config()
     return data.get("lastfm_api_key")
 
 
 def get_lastfm_shared_secret() -> Optional[str]:
-    _ensure_user_config_template()
     data = _read_user_config()
     return data.get("lastfm_shared_secret")
 

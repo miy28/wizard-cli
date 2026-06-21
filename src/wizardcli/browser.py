@@ -10,6 +10,8 @@ from textual import work
 from textual.worker import get_current_worker
 from textual.widgets import DirectoryTree
 
+from .theme import STYLE_READY_BOLD
+
 
 def _path_key(path: os.PathLike[str] | str) -> str:
     return os.path.normcase(os.path.abspath(os.fspath(path)))
@@ -48,7 +50,7 @@ class MediaBrowser(DirectoryTree):
             return label
 
         if _path_key(path) == self._committed_path_key:
-            label.stylize("bold green")
+            label.stylize(STYLE_READY_BOLD)
         return label
 
     def cycle_sort(self) -> str:

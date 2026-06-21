@@ -1,17 +1,18 @@
 /* One continuous surface; structure comes from borders, spacing, and text. */
 $wizard-fg: #e5e7eb;
-$wizard-header-fg: #dbeafe;
-$wizard-title-fg: #ff849f;
-$wizard-user-fg: #3f86e9;
-$wizard-footer-fg: #94a3b8;
-$wizard-border: #334155;
-$wizard-browser-border: #1f2937;
-$wizard-browser-fg: #cbd5e1;
-$wizard-guide-fg: #475569;
+$wizard-header-fg: #e5e7eb;
+$wizard-title-fg: #ff358d;
+$wizard-user-fg: #4765d0;
+$wizard-footer-fg: #e5e7eb;
+$wizard-border: #e5e7eb;
+$wizard-browser-border: #ecf4fe;
+$wizard-browser-fg: #ecf4fe;
+$wizard-guide-fg: #a1a6ad;
 $wizard-accent: #ff358d;
 $wizard-status-fg: #cbd5e1;
-$wizard-sort-fg: #94a3b8;
-$wizard-bg-solid: #0b0f19;
+$wizard-sort-fg: #aaaeb4;
+$wizard-placeholder-fg: #686a6f;
+$wizard-bg-solid: ansi_default;
 $wizard-bg: ansi_default;
 
 Screen {
@@ -122,9 +123,9 @@ MediaBrowser {
     padding: 0 1;
     scrollbar-size-vertical: 1;
     scrollbar-size-horizontal: 0;
-    scrollbar-color: #64748b 45%;
-    scrollbar-color-hover: #6c7d95 50%;
-    scrollbar-color-active: #6c7d95;
+    scrollbar-color: $wizard-sort-fg;
+    scrollbar-color-hover: $wizard-sort-fg;
+    scrollbar-color-active: $wizard-sort-fg;
     scrollbar-background: transparent;
     scrollbar-background-hover: transparent;
     scrollbar-background-active: transparent;
@@ -169,15 +170,52 @@ MediaBrowser .tree--guide {
     color: $wizard-status-fg;
 }
 
+#stage-description {
+    content-align: left top;
+}
+
+#description-edit-input {
+    background: $wizard-bg;
+    color: $wizard-status-fg;
+    border: none;
+    padding: 0;
+    height: 1;
+    width: 1fr;
+}
+
+#description-edit-input:focus {
+    border: none;
+    background: $wizard-bg;
+    background-tint: transparent;
+}
+
+#description-edit-input > .input--cursor {
+    background: $wizard-accent;
+    color: $wizard-bg;
+    text-style: bold;
+}
+
+#description-edit-input > .input--selection {
+    background: $wizard-accent;
+    color: $wizard-bg;
+}
+
+#description-edit-input > .input--placeholder,
+#description-edit-input > .input--suggestion {
+    color: $wizard-placeholder-fg;
+    text-style: not dim;
+    text-opacity: 100%;
+}
+
 #stage-preview {
     overflow-y: hidden;
     align-horizontal: center;
     align-vertical: middle;
     scrollbar-size-vertical: 1;
     scrollbar-size-horizontal: 0;
-    scrollbar-color: #64748b 45%;
-    scrollbar-color-hover: #6c7d95 50%;
-    scrollbar-color-active: #6c7d95;
+    scrollbar-color: $wizard-sort-fg;
+    scrollbar-color-hover: $wizard-sort-fg;
+    scrollbar-color-active: $wizard-sort-fg;
     scrollbar-background: transparent;
     scrollbar-background-hover: transparent;
     scrollbar-background-active: transparent;

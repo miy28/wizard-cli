@@ -3,10 +3,20 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from rich.style import Style
+from rich.text import Text
 
-from wizardcli.ui import CoverPreviewScroll, WizardApp, _cover_preview_dimensions
+from wizardcli.models import DescriptionDraft, DescriptionInputs, AudioAnalysisResult, MetadataContext
+from wizardcli.ui import (
+    CoverPreviewScroll,
+    DescriptionForm,
+    WizardApp,
+    _append_metadata_row,
+    _cover_preview_dimensions,
+    _split_csv,
+)
 from wizardcli.browser import MediaBrowser
 from wizardcli.config import default_config
+from wizardcli.theme import WIZARD_READY
 
 
 class FakeStatus:
@@ -18,7 +28,9 @@ class FakeStatus:
 
 
 class FakeEvent:
-    def __init__(self) -> None:
+    def __init__(self, key: str = "", character: str | None = None) -> None:
+        self.key = key
+        self.character = character
         self.stopped = False
         self.default_prevented = False
 
@@ -306,7 +318,7 @@ def test_media_browser_renders_committed_file_green(tmp_path) -> None:
     browser.set_committed_path(beat)
     label = browser.render_label(node, Style(), Style())
 
-    assert any("green" in str(span.style) for span in label.spans)
+    assert any(WIZARD_READY in str(span.style) for span in label.spans)
 
 
 def test_seek_temp_activity_restores_preview_status(tmp_path) -> None:
@@ -406,3 +418,132 @@ def test_review_preview_reports_missing_description(tmp_path) -> None:
     assert "Song: Ready" in preview
     assert "Cover: Ready" in preview
     assert "Description: Missing" in preview
+
+
+def test_file_metadata_row_dims_value_only() -> None:
+    text = Text()
+
+    _append_metadata_row(text, "Kind", "MP3", newline=False)
+
+    assert text.plain == "Kind MP3"
+    assert any(
+        span.start == len("Kind ")
+        and span.end == len("Kind MP3")
+        and "dim" in str(span.style)
+        for span in text.spans
+    )
+
+
+def test_split_csv_cleans_and_dedupes_terms() -> None:
+    assert _split_csv(" Carti, uzi, Carti ,, beat switch ") == [
+        "Carti",
+        "uzi",
+        "beat switch",
+    ]
+
+
+def test_description_form_commits_textual_input_value() -> None:
+    form = DescriptionForm()
+
+    form.on_key(FakeEvent("enter"))
+    form.edit_input = SimpleNamespace(value="Carti", remove=lambda: None)
+    form._commit_edit()
+
+    form.on_key(FakeEvent("down"))
+    form.on_key(FakeEvent("enter"))
+    form.edit_input = SimpleNamespace(value="rage", remove=lambda: None)
+    form._commit_edit()
+
+    inputs = form.description_inputs()
+
+    assert inputs.artist_names == ["Carti"]
+    assert inputs.descriptors == ["rage"]
+
+
+def test_description_form_hides_plain_text_value_while_input_is_mounted() -> None:
+    form = DescriptionForm()
+
+    form.on_key(FakeEvent("enter"))
+    rendered = form._render_form().plain.splitlines()[0]
+
+    assert rendered == "> Artists: "
+
+
+def test_description_form_empty_edit_input_has_no_placeholder(monkeypatch) -> None:
+    form = DescriptionForm()
+    mounted = []
+
+    form.mount = lambda widget: mounted.append(widget)  # type: ignore[method-assign]
+    monkeypatch.setattr("wizardcli.ui.Input.focus", lambda self: None)
+    form._mount_edit_input("artists")
+
+    assert form.edit_input is mounted[0]
+    assert form.edit_input.placeholder == ""
+
+
+def test_description_form_cancel_keeps_existing_value() -> None:
+    form = DescriptionForm()
+    form.values["artists"] = "Carti"
+
+    form.on_key(FakeEvent("enter"))
+    form.edit_input = SimpleNamespace(value="12", remove=lambda: None)
+    form.on_key(FakeEvent("escape"))
+
+    assert form.values["artists"] == "Carti"
+
+
+def test_description_draft_marks_review_ready(tmp_path) -> None:
+    app = WizardApp(default_config(root_dir=tmp_path))
+    app._active_stage = 4
+    app._committed_beat = tmp_path / "beat.mp3"
+    app._committed_cover = tmp_path / "cover.png"
+    draft = DescriptionDraft(
+        inputs=DescriptionInputs(["Carti"], ["rage"]),
+        title="Carti type beat",
+        body="body",
+        analysis=AudioAnalysisResult(150.0, "D", 0.9),
+        metadata=MetadataContext(
+            keywords=["Carti type beat"],
+            artists=["Carti"],
+            descriptors=["rage"],
+            summary="Carti type beat",
+            bpm=150.0,
+            key="D",
+        ),
+        description="Carti type beat\nbody",
+    )
+
+    app._apply_description_draft(draft, app._description_generation)
+    preview = app._stage_preview().plain
+
+    assert app._description_ready is True
+    assert "Description: Ready" in preview
+
+
+def test_lastfm_status_reports_missing_key(monkeypatch, tmp_path) -> None:
+    app = WizardApp(default_config(root_dir=tmp_path))
+    monkeypatch.setattr("wizardcli.ui.get_lastfm_api_key", lambda: None)
+
+    assert app._lastfm_status_text() == "Last.fm: off (no API key configured)"
+
+
+def test_lastfm_status_reports_used_modifier_counts(monkeypatch, tmp_path) -> None:
+    app = WizardApp(default_config(root_dir=tmp_path))
+    monkeypatch.setattr("wizardcli.ui.get_lastfm_api_key", lambda: "demo-key")
+    app._description_draft = DescriptionDraft(
+        inputs=DescriptionInputs(["Carti"], []),
+        title="Carti type beat",
+        body="body",
+        analysis=None,
+        metadata=MetadataContext(
+            keywords=["Carti type beat"],
+            artists=["Carti"],
+            summary="Carti type beat",
+            lastfm_enabled=True,
+            lastfm_similar_artists=["Ken Carson", "Destroy Lonely"],
+            lastfm_discovered_descriptors=["rage"],
+        ),
+        description="Carti type beat\nbody",
+    )
+
+    assert app._lastfm_status_text() == "Last.fm: used 2 similar artists and 1 discovered tags"

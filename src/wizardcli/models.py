@@ -20,6 +20,13 @@ class AudioAnalysisResult:
 
 
 @dataclass(frozen=True)
+class DescriptionInputs:
+    artist_names: list[str]
+    descriptors: list[str] = field(default_factory=list)
+    title: str | None = None
+
+
+@dataclass(frozen=True)
 class MetadataContext:
     keywords: list[str]
     artists: list[str]
@@ -27,6 +34,9 @@ class MetadataContext:
     descriptors: list[str] = field(default_factory=list)
     bpm: float | None = None
     key: str | None = None
+    lastfm_enabled: bool = False
+    lastfm_similar_artists: list[str] = field(default_factory=list)
+    lastfm_discovered_descriptors: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -46,9 +56,19 @@ class RenderResult:
 
 
 @dataclass(frozen=True)
+class DescriptionDraft:
+    inputs: DescriptionInputs
+    title: str
+    body: str
+    analysis: AudioAnalysisResult | None
+    metadata: MetadataContext
+    description: str
+
+
+@dataclass(frozen=True)
 class PipelineResult:
     selection: MediaSelection
-    analysis: AudioAnalysisResult
+    analysis: AudioAnalysisResult | None
     metadata: MetadataContext
     description: str
     rendered_video: Path

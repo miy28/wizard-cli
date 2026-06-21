@@ -172,7 +172,7 @@ def generate_keyword_phrases(
 
 def build_metadata_context(
     artist_names: list[str],
-    analysis: AudioAnalysisResult,
+    analysis: AudioAnalysisResult | None = None,
     lastfm_api_key: str | None = None,
     lastfm_session_key: str | None = None,
     descriptors: list[str] | None = None,
@@ -192,8 +192,11 @@ def build_metadata_context(
         artists=artist_names,
         descriptors=_dedupe_terms(descriptors or []),
         summary=summary,
-        bpm=analysis.bpm,
-        key=analysis.key,
+        bpm=analysis.bpm if analysis is not None else None,
+        key=analysis.key if analysis is not None else None,
+        lastfm_enabled=bool(lastfm_api_key),
+        lastfm_similar_artists=pool.similar_artists,
+        lastfm_discovered_descriptors=pool.discovered_descriptors,
     )
 
 

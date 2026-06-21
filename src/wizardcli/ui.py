@@ -11,14 +11,25 @@ from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.scrollbar import ScrollTo
 from textual.worker import get_current_worker
-from textual.widgets import ContentSwitcher, Footer, Label, Static
+from textual.widgets import ContentSwitcher, Footer, Input, Label, Static
 
 from . import __version__
 from .audio import PlaybackController, PlaybackError
 from .browser import MediaBrowser
 from .chafa import ChafaError, ChafaPreview, render_cover
-from .config import AppConfig, default_config
+from .config import AppConfig, default_config, get_lastfm_api_key, get_lastfm_session
+from .models import DescriptionDraft, DescriptionInputs
 from .paths import AUDIO_EXTENSIONS, COVER_EXTENSIONS
+from .pipeline import PipelineError, generate_description_draft
+from .theme import (
+    STYLE_ACCENT_BOLD,
+    STYLE_ERROR_BOLD,
+    STYLE_MUTED,
+    STYLE_READY,
+    STYLE_READY_BOLD,
+    STYLE_STATUS,
+    WIZARD_PLACEHOLDER,
+)
 
 
 STAGES = {
@@ -30,6 +41,12 @@ STAGES = {
 
 POINTER_SCROLL_INTERVAL = 0.04
 DETAIL_KEY_SCROLL_ROWS = 5
+DESCRIPTION_ROWS = [
+    ("artists", "Artists"),
+    ("descriptors", "Descriptors"),
+    ("title", "Title (overrides)"),
+    ("generate", "Generate / Regenerate"),
+]
 
 
 def _cover_preview_dimensions(
@@ -170,6 +187,165 @@ class CoverPreviewScroll(VerticalScroll):
         self.scroll_home(animate=False, immediate=True)
 
 
+class DescriptionForm(Static):
+    can_focus = True
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__("", **kwargs)
+        self.values = {
+            "artists": "",
+            "descriptors": "",
+            "title": "",
+        }
+        self.selected_index = 0
+        self.editing = False
+        self.edit_key: str | None = None
+        self.edit_input: Input | None = None
+        self.lastfm_status = ""
+
+    def on_mount(self) -> None:
+        self._refresh()
+
+    def description_inputs(self) -> DescriptionInputs:
+        return DescriptionInputs(
+            artist_names=_split_csv(self.values["artists"]),
+            descriptors=_split_csv(self.values["descriptors"]),
+            title=self.values["title"].strip() or None,
+        )
+
+    def set_lastfm_status(self, text: str) -> None:
+        self.lastfm_status = text
+        self._refresh()
+
+    def _refresh(self) -> None:
+        if self.is_mounted:
+            self.update(self._render_form())
+
+    def _render_form(self) -> Text:
+        text = Text()
+        for index, (key, label) in enumerate(DESCRIPTION_ROWS):
+            selected = index == self.selected_index
+            prefix = "> " if selected else "  "
+            style = STYLE_ACCENT_BOLD if selected else STYLE_STATUS
+            if key == "generate":
+                text.append(f"{prefix}{label}\n", style=style)
+                continue
+
+            is_editing_row = self.editing and self.edit_key == key
+            value = self.values[key]
+            if is_editing_row:
+                text.append(f"{prefix}{label}: \n", style=style)
+                continue
+            if not value:
+                value = self._placeholder(key)
+                value_style = WIZARD_PLACEHOLDER
+            else:
+                value_style = STYLE_STATUS
+
+            text.append(f"{prefix}{label}: ", style=style)
+            text.append(value, style=value_style)
+            text.append("\n")
+
+        text.append("\n")
+        # text.append(
+        #     "Use Up/Down to move. Enter edits selected text. "
+        #     "Enter again commits the field.",
+        #     style=STYLE_MUTED,
+        # )
+        # text.append("\n")
+        text.append(self.lastfm_status, style=STYLE_MUTED)
+        return text
+
+    @staticmethod
+    def _placeholder(key: str) -> str:
+        return {
+            "artists": "ex: Lil Uzi Vert, Playboi Carti",
+            "descriptors": "ex: ambient, rage, dnb, beat switch",
+            "title": "Leave blank for '(Artist) type beat'",
+        }[key]
+
+    def _selected_key(self) -> str:
+        return DESCRIPTION_ROWS[self.selected_index][0]
+
+    def _move(self, delta: int) -> None:
+        if self.editing:
+            return
+        self.selected_index = (self.selected_index + delta) % len(DESCRIPTION_ROWS)
+        self._refresh()
+
+    def _begin_edit(self) -> None:
+        key = self._selected_key()
+        if key == "generate":
+            self.app._generate_description()
+            return
+        self.editing = True
+        self.edit_key = key
+        self._refresh()
+        if self.is_mounted:
+            self.call_after_refresh(self._mount_edit_input, key)
+
+    def _mount_edit_input(self, key: str) -> None:
+        self._remove_edit_input()
+        value = self.values[key]
+        input_widget = Input(
+            value=value,
+            placeholder="",
+            id="description-edit-input",
+        )
+        self.edit_input = input_widget
+        self.mount(input_widget)
+        input_widget.styles.offset = (self._input_column(key), self.selected_index)
+        input_widget.focus()
+
+    def _commit_edit(self) -> None:
+        if self.edit_key is not None and self.edit_input is not None:
+            self.values[self.edit_key] = self.edit_input.value.strip()
+        self._remove_edit_input()
+        self.editing = False
+        self.edit_key = None
+        self._refresh()
+
+    def _cancel_edit(self) -> None:
+        self._remove_edit_input()
+        self.editing = False
+        self.edit_key = None
+        self._refresh()
+
+    def _remove_edit_input(self) -> None:
+        if self.edit_input is not None:
+            self.edit_input.remove()
+            self.edit_input = None
+
+    @staticmethod
+    def _input_column(key: str) -> int:
+        label = dict(DESCRIPTION_ROWS)[key]
+        return len("> ") + len(label) + len(": ")
+
+    def on_key(self, event: events.Key) -> None:
+        key = event.key or ""
+        if self.editing:
+            if key == "escape":
+                self._cancel_edit()
+                event.stop()
+            return
+
+        if key == "up":
+            self._move(-1)
+            event.stop()
+        elif key == "down":
+            self._move(1)
+            event.stop()
+        elif key == "enter":
+            self._begin_edit()
+            event.stop()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input is self.edit_input:
+            self._commit_edit()
+            self.focus()
+            event.stop()
+
+
 def get_user_host_string() -> Text:
     return Text.from_markup("mikeyy")
 
@@ -209,6 +385,10 @@ class WizardApp(App):
         self._highlighted_song: Path | None = None
         self._highlighted_cover: Path | None = None
         self._description_ready = False
+        self._description_draft: DescriptionDraft | None = None
+        self._description_error: str | None = None
+        self._description_generating = False
+        self._description_generation = 0
         # UI state persistence
         self._ui_state_path = Path(self.config.root_dir) / ".wizardcli_state.json"
         self._ui_state: dict = self._load_ui_state()
@@ -234,9 +414,7 @@ class WizardApp(App):
             with ContentSwitcher(initial="stage-song", id="stage-switcher"):
                 yield MediaBrowser(self.config.songs_dir, "songs", id="stage-song")
                 yield MediaBrowser(self.config.covers_dir, "covers", id="stage-cover")
-                yield Static(
-                    "Description controls will live here.\n\n"
-                    "Artists\nDescriptors\nTitle\nBody\nGenerate / Regenerate",
+                yield DescriptionForm(
                     id="stage-description",
                     classes="stage-placeholder",
                 )
@@ -261,6 +439,7 @@ class WizardApp(App):
 
     def action_stage_description(self) -> None:
         self._select_stage(3)
+        self.call_after_refresh(self._focus_description_form)
 
     def action_stage_review(self) -> None:
         self._select_stage(4)
@@ -288,12 +467,14 @@ class WizardApp(App):
             path = self._highlighted_cover or self._committed_cover
             if path is not None:
                 self._request_cover_preview(path)
+        elif stage == 3:
+            self.call_after_refresh(self._focus_description_form)
 
     def _refresh_stage_view(self) -> None:
         try:
             indicator = Text()
             for number, (name, _) in STAGES.items():
-                style = "bold #ff358d" if number == self._active_stage else "dim"
+                style = STYLE_ACCENT_BOLD if number == self._active_stage else STYLE_STATUS
                 indicator.append(f"{number} {name}", style=style)
                 if number != len(STAGES):
                     indicator.append("   ")
@@ -313,6 +494,7 @@ class WizardApp(App):
                 self._cover_detail,
                 suppress=self._active_stage == 2 and not self._cover_detail,
             )
+            self._refresh_description_lastfm_status()
         except Exception:
             pass
 
@@ -332,18 +514,15 @@ class WizardApp(App):
                 committed=path is not None and path == self._committed_cover,
             )
         if self._active_stage == 3:
-            text = Text("DESCRIPTION PREVIEW\n\n", style="bold #ff358d")
-            text.append("No description generated yet.\n\n", style="dim")
-            text.append("Stage 3 will collect artists, descriptors, title, and body.")
-            return text
+            return self._description_preview()
 
-        text = Text("PIPELINE STATE\n\n", style="bold #ff358d")
+        text = Text("PIPELINE STATE\n\n", style=STYLE_ACCENT_BOLD)
         text.append(self._readiness_line("Song", self._committed_beat))
         text.append(self._readiness_line("Cover", self._committed_cover))
         text.append(self._readiness_line("Description", self._description_ready))
         text.append("\n")
         if self._committed_beat and self._committed_cover and self._description_ready:
-            text.append("Ready to render.", style="bold green")
+            text.append("Ready to render.", style=STYLE_READY_BOLD)
         else:
             text.append("Complete the missing stages before rendering.", style="dim")
         return text
@@ -355,7 +534,7 @@ class WizardApp(App):
         path: Path | None,
         committed: bool,
     ) -> Text:
-        text = Text(f"{icon}\n\n", style="bold #ff358d")
+        text = Text(f"{icon}\n\n", style=STYLE_ACCENT_BOLD)
         # text.append(f"{heading}\n\n", style="bold")
         if path is None:
             text.append("Highlight a file to preview it.", style="dim")
@@ -377,12 +556,13 @@ class WizardApp(App):
         text.append(f"{path.name}\n", style="bold")
         text.append(
             "Committed\n" if committed else "Highlighted\n",
-            style="green" if committed else "dim",
+            style=STYLE_READY if committed else "dim",
         )
-        text.append(f"\nKind: {path.suffix.lstrip('.').upper() or 'File'}\n")
-        text.append(f"Size: {size}\n")
-        text.append(f"Modified: {modified}\n")
-        text.append(f"Where: {path.parent}")
+        text.append("\n")
+        _append_metadata_row(text, "Kind:", path.suffix.lstrip(".").upper() or "File")
+        _append_metadata_row(text, "Size:", size)
+        _append_metadata_row(text, "Modified:", modified)
+        _append_metadata_row(text, "Where:", str(path.parent), newline=False)
         return text
 
     @staticmethod
@@ -390,7 +570,7 @@ class WizardApp(App):
         ready = bool(value)
         return Text(
             f"{'✓' if ready else '·'} {label}: {'Ready' if ready else 'Missing'}\n",
-            style="green" if ready else "dim",
+            style=STYLE_READY if ready else "dim",
         )
 
     def action_preview(self) -> None:
@@ -602,6 +782,140 @@ class WizardApp(App):
             return self.query_one(f"#{panel_id}", MediaBrowser)
         except Exception:
             return None
+
+    def _focus_description_form(self) -> None:
+        try:
+            self.query_one("#stage-description", DescriptionForm).focus()
+        except Exception:
+            pass
+
+    def _description_inputs_from_form(self) -> DescriptionInputs:
+        return self.query_one("#stage-description", DescriptionForm).description_inputs()
+
+    def _description_preview(self) -> Text:
+        text = Text("DESCRIPTION PREVIEW\n\n", style=STYLE_ACCENT_BOLD)
+        if self._description_generating:
+            text.append("Generating description draft...", style=STYLE_MUTED)
+            return text
+        if self._description_error:
+            text.append("Generation failed\n\n", style=STYLE_ERROR_BOLD)
+            text.append(self._description_error, style=STYLE_MUTED)
+            return text
+        if self._description_draft is None:
+            text.append("No description generated yet.\n\n", style="dim")
+            text.append("Fill artists/descriptors/title, then Generate.")
+            return text
+
+        draft = self._description_draft
+        text.append(f"{draft.title}\n\n", style="bold")
+        text.append(f"Artists: {', '.join(draft.inputs.artist_names)}\n")
+        if draft.inputs.descriptors:
+            text.append(f"Descriptors: {', '.join(draft.inputs.descriptors)}\n")
+        if draft.analysis is not None:
+            text.append(f"BPM: {draft.analysis.bpm:.2f}\n")
+            text.append(f"Key: {draft.analysis.key}\n")
+        text.append("\n")
+        text.append(draft.description)
+        return text
+
+    def _refresh_description_lastfm_status(self) -> None:
+        try:
+            self.query_one("#stage-description", DescriptionForm).set_lastfm_status(
+                self._lastfm_status_text()
+            )
+        except Exception:
+            pass
+
+    def _lastfm_status_text(self) -> str:
+        key = get_lastfm_api_key()
+        if not key:
+            return "Last.fm: off (no API key configured)"
+        if self._description_generating:
+            return "Last.fm: on (checking similar artists and tags...)"
+        if self._description_draft is None:
+            return "Last.fm: on (will enrich when Generate runs)"
+        metadata = self._description_draft.metadata
+        similar_count = len(metadata.lastfm_similar_artists)
+        tag_count = len(metadata.lastfm_discovered_descriptors)
+        if similar_count or tag_count:
+            return (
+                f"Last.fm: used {similar_count} similar artists "
+                f"and {tag_count} discovered tags"
+            )
+        return "Last.fm: on, but returned 0 similar artists and 0 tags"
+
+    def _generate_description(self) -> None:
+        if self._committed_beat is None:
+            self.set_activity("Commit a beat before generating a description.")
+            return
+
+        inputs = self._description_inputs_from_form()
+        if not inputs.artist_names:
+            self.set_activity("Add at least one artist before generating.")
+            return
+
+        self._description_generation += 1
+        generation = self._description_generation
+        self._description_generating = True
+        self._description_error = None
+        self._description_ready = False
+        self._refresh_stage_view()
+        self._refresh_description_lastfm_status()
+        self.set_activity("Generating description draft...")
+        self._generate_description_worker(self._committed_beat, inputs, generation)
+
+    @work(thread=True, exclusive=True, group="description-draft", exit_on_error=False)
+    def _generate_description_worker(
+        self,
+        beat: Path,
+        inputs: DescriptionInputs,
+        generation: int,
+    ) -> None:
+        worker = get_current_worker()
+        try:
+            draft = generate_description_draft(
+                self.config,
+                beat=beat,
+                inputs=inputs,
+                lastfm_api_key=get_lastfm_api_key(),
+                lastfm_session_key=get_lastfm_session(),
+            )
+        except Exception as exc:
+            if not worker.is_cancelled:
+                message = str(exc) if isinstance(exc, PipelineError) else f"{exc}"
+                self.call_from_thread(
+                    self._apply_description_error,
+                    message,
+                    generation,
+                )
+            return
+
+        if worker.is_cancelled:
+            return
+        self.call_from_thread(self._apply_description_draft, draft, generation)
+
+    def _apply_description_draft(
+        self,
+        draft: DescriptionDraft,
+        generation: int,
+    ) -> None:
+        if generation != self._description_generation:
+            return
+        self._description_draft = draft
+        self._description_generating = False
+        self._description_error = None
+        self._description_ready = True
+        self._refresh_stage_view()
+        self.set_activity(f"Description draft ready: {draft.title}")
+
+    def _apply_description_error(self, message: str, generation: int) -> None:
+        if generation != self._description_generation:
+            return
+        self._description_generating = False
+        self._description_error = message
+        self._description_ready = False
+        self._refresh_stage_view()
+        self.set_activity(f"Description generation failed: {message}")
 
     def set_activity(self, text: str) -> None:
         """Set the main activity/status line (`#status`) to `text`."""
@@ -838,7 +1152,7 @@ class WizardApp(App):
         if generation != self._cover_preview_generation or current != path:
             return
         if self._active_stage == 2:
-            text = Text("▧\n\n", style="bold #ff358d")
+            text = Text("▧\n\n", style=STYLE_ACCENT_BOLD)
             text.append(message, style="dim")
             self.query_one("#stage-preview-art", Static).update(text)
 
@@ -853,3 +1167,22 @@ def _format_file_size(size: int) -> str:
             return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
         value /= 1024
     return f"{size} B"
+
+
+def _append_metadata_row(text: Text, label: str, value: str, newline: bool = True) -> None:
+    text.append(f"{label} ")
+    text.append(value, style="dim")
+    if newline:
+        text.append("\n")
+
+
+def _split_csv(value: str) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for item in value.split(","):
+        text = " ".join(item.strip().split())
+        key = text.lower()
+        if text and key not in seen:
+            cleaned.append(text)
+            seen.add(key)
+    return cleaned

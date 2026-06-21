@@ -3,7 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from wizardcli import config as config_module
-from wizardcli.config import DEFAULT_COVERS_DIR, DEFAULT_SONGS_DIR, default_config
+from wizardcli.config import (
+    DEFAULT_COVERS_DIR,
+    DEFAULT_SONGS_DIR,
+    default_config,
+    get_lastfm_api_key,
+    get_lastfm_shared_secret,
+)
 
 
 def test_default_config_uses_windows_drive_defaults(monkeypatch) -> None:
@@ -66,3 +72,12 @@ def test_default_config_honors_explicit_overrides() -> None:
 
     assert config.songs_dir == Path("E:/songs")
     assert config.covers_dir == Path("E:/covers")
+
+
+def test_lastfm_getters_do_not_create_user_config(monkeypatch, tmp_path: Path) -> None:
+    config_dir = tmp_path / "missing-config"
+    monkeypatch.setenv("WIZARDCLI_CONFIG_DIR", str(config_dir))
+
+    assert get_lastfm_api_key() is None
+    assert get_lastfm_shared_secret() is None
+    assert not config_dir.exists()

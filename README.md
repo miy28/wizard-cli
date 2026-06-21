@@ -25,14 +25,13 @@ Working today:
 - Immediate beat preview through a persistent `mpv` process
 - Keyboard seeking, pause, mute, sorting, and quick navigation
 - Independent beat and cover selection
-- Headless audio analysis, metadata generation, description compilation, and FFmpeg rendering
+- UI description draft generation from artists, descriptors, and optional title
+- Headless metadata generation, description compilation, and FFmpeg rendering
 - Last.fm-assisted similar-artist and descriptor discovery
 - YouTube-shaped keyword generation within a 500-character budget
 
 Still being built:
 
-- Artist, descriptor, title, and description editing in the UI
-- Metadata preview and regeneration
 - Review, validation, render progress, and cancellation
 - Rendered-video approval
 - YouTube OAuth, tags, and upload
@@ -70,6 +69,8 @@ chafa --version
 | `s` | Cycle sorting mode |
 | `Ctrl+Up` / `Ctrl+Down` | Jump to the top or bottom |
 | `Enter` | Commit the selected beat or cover; committed covers open a large preview |
+| `Enter` on stage 3 fields | Move to the next description field |
+| `Enter` on Generate | Generate or regenerate the description draft |
 | `Escape` | Return from the large cover preview to the browser |
 | `1` / `2` / `3` / `4` | Switch between Song, Cover, Description, and Review |
 | `q` | Quit |
@@ -114,7 +115,7 @@ wizard-cli run \
   --body "Description body"
 ```
 
-This resolves the media files, analyzes BPM and key, generates metadata, compiles `template.md`, and renders a 2560x1440 MP4 into `artifacts/`.
+This resolves the media files, generates metadata, compiles `template.md`, and renders a 2560x1440 MP4 into `artifacts/`.
 
 The `--publish` flag is reserved for YouTube publishing, which is not wired yet.
 

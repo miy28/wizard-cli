@@ -85,6 +85,16 @@ def test_build_metadata_context_uses_guaranteed_and_sampled_modifiers(
     assert "beat switch type beat" in context.keywords
     assert any(keyword.startswith("Metro Boomin type beat") for keyword in context.keywords)
     assert context.summary.startswith("Lil Uzi Vert type beat")
+    assert context.lastfm_enabled is True
+    assert context.lastfm_similar_artists == ["Lil Baby", "The Weeknd", "Metro Boomin"]
+    assert context.lastfm_discovered_descriptors == [
+        "rage",
+        "trap",
+        "hip hop",
+        "rnb",
+        "pop",
+        "synthpop",
+    ]
 
 
 def test_build_metadata_context_without_lastfm_key_skips_network() -> None:
@@ -103,6 +113,7 @@ def test_build_metadata_context_without_lastfm_key_skips_network() -> None:
     assert "128 bpm" not in context.keywords
     assert context.key == "C#"
     assert context.bpm == 128.2
+    assert context.lastfm_enabled is False
 
 
 def test_build_metadata_context_includes_artist_top_tags_in_keywords(
